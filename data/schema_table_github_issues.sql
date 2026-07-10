@@ -110,22 +110,26 @@ CREATE INDEX idx_source_issues_issue
 CREATE TABLE analytics_cache (
     id INTEGER PRIMARY KEY,
     source_id INTEGER NOT NULL,
-    cache_date DATE NOT NULL,
+    date DATE NOT NULL,
 
-    issues_24h INTEGER NOT NULL DEFAULT 0,
-    comments_24h INTEGER NOT NULL DEFAULT 0,
-    source_score INTEGER NOT NULL DEFAULT 0,
-    source_tier INTEGER NOT NULL DEFAULT 1,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    total_issues INTEGER NOT NULL DEFAULT 0,
+    total_comments INTEGER NOT NULL DEFAULT 0,
+    avg_comments_per_issue FLOAT NOT NULL DEFAULT 0,
+    top_issue_id INTEGER,
+    growth_rate FLOAT NOT NULL DEFAULT 0,
+    schedule_tier INTEGER NOT NULL DEFAULT 1,
+    cached_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    UNIQUE (source_id, cache_date),
+    UNIQUE (source_id, date),
 
     FOREIGN KEY (source_id)
-        REFERENCES sources(id) ON DELETE CASCADE
+        REFERENCES sources(id) ON DELETE CASCADE,
+    FOREIGN KEY (top_issue_id)
+        REFERENCES issues(id) ON DELETE SET NULL
 );
 
 CREATE INDEX idx_analytics_cache_source_date
-    ON analytics_cache (source_id, cache_date);
+    ON analytics_cache (source_id, date);
 
 
 CREATE TABLE pipeline_jobs (

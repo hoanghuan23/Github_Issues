@@ -101,18 +101,19 @@ def upsert_analytics_cache(
     cache = db.scalar(
         select(AnalyticsCache).where(
             AnalyticsCache.source_id == source_id,
-            AnalyticsCache.cache_date == cache_date,
+            AnalyticsCache.date == cache_date,
         )
     )
     if cache is None:
-        cache = AnalyticsCache(source_id=source_id, cache_date=cache_date)
+        cache = AnalyticsCache(source_id=source_id, date=cache_date)
         db.add(cache)
 
-    cache.issues_24h = issues_24h
-    cache.comments_24h = comments_24h
-    cache.source_score = source_score
-    cache.source_tier = source_tier
-    cache.updated_at = now_naive
+    cache.total_issues = issues_24h
+    cache.total_comments = comments_24h
+    cache.avg_comments_per_issue = comments_24h / issues_24h if issues_24h else 0.0
+    cache.growth_rate = float(source_score)
+    cache.schedule_tier = source_tier
+    cache.cached_at = now_naive
     return cache
 
 

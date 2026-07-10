@@ -1,10 +1,12 @@
-from datetime import date, datetime
+from datetime import date as DateValue
+from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -81,16 +83,18 @@ class SourceIssue(Base):
 
 class AnalyticsCache(Base):
     __tablename__ = "analytics_cache"
-    __table_args__ = (UniqueConstraint("source_id", "cache_date"),)
+    __table_args__ = (UniqueConstraint("source_id", "date"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     source_id: Mapped[int] = mapped_column(ForeignKey("sources.id", ondelete="CASCADE"), nullable=False)
-    cache_date: Mapped[date] = mapped_column(Date, nullable=False)
-    issues_24h: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    comments_24h: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    source_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    source_tier: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    date: Mapped[DateValue] = mapped_column(Date, nullable=False)
+    total_issues: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_comments: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    avg_comments_per_issue: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    top_issue_id: Mapped[int | None] = mapped_column(ForeignKey("issues.id", ondelete="SET NULL"))
+    growth_rate: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    schedule_tier: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    cached_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
 
 class PipelineJob(Base):
