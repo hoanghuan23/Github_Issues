@@ -93,7 +93,6 @@ def upsert_analytics_cache(
     issues_24h: int,
     comments_24h: int,
     source_score: int,
-    source_tier: int,
     now: datetime,
 ) -> AnalyticsCache:
     now_naive = to_naive_utc(now)
@@ -112,7 +111,6 @@ def upsert_analytics_cache(
     cache.total_comments = comments_24h
     cache.avg_comments_per_issue = comments_24h / issues_24h if issues_24h else 0.0
     cache.growth_rate = float(source_score)
-    cache.schedule_tier = source_tier
     cache.cached_at = now_naive
     return cache
 

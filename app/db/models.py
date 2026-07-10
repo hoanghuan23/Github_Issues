@@ -93,7 +93,6 @@ class AnalyticsCache(Base):
     avg_comments_per_issue: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     top_issue_id: Mapped[int | None] = mapped_column(ForeignKey("issues.id", ondelete="SET NULL"))
     growth_rate: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    schedule_tier: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     cached_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
 

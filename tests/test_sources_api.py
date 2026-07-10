@@ -63,7 +63,6 @@ def test_source_service_does_not_hold_transaction_while_calling_github(db_sessio
     assert cache.total_issues == 1
     assert cache.total_comments == 2
     assert cache.growth_rate == 8
-    assert cache.schedule_tier == 2
 
 
 def test_analytics_cache_updates_same_day_and_inserts_next_day(db_session):
@@ -81,7 +80,6 @@ def test_analytics_cache_updates_same_day_and_inserts_next_day(db_session):
         issues_24h=3,
         comments_24h=4,
         source_score=18,
-        source_tier=2,
         now=first_cache.cached_at,
     )
     db_session.commit()
@@ -89,7 +87,6 @@ def test_analytics_cache_updates_same_day_and_inserts_next_day(db_session):
     caches = db_session.query(AnalyticsCache).all()
     assert len(caches) == 1
     assert caches[0].total_issues == 3
-    assert caches[0].schedule_tier == 2
 
     upsert_analytics_cache(
         db_session,
@@ -97,7 +94,6 @@ def test_analytics_cache_updates_same_day_and_inserts_next_day(db_session):
         issues_24h=5,
         comments_24h=6,
         source_score=28,
-        source_tier=3,
         now=first_cache.cached_at + timedelta(days=1),
     )
     db_session.commit()

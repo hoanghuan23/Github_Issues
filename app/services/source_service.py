@@ -113,7 +113,7 @@ class SourceService:
         issues_24h, comments_24h = source_24h_counts(db, source_id, now)
         score = calculate_source_score(issues_24h, comments_24h)
         tier = calculate_source_tier(score)
-        upsert_analytics_cache(db, source_id, issues_24h, comments_24h, score, tier, now)
+        upsert_analytics_cache(db, source_id, issues_24h, comments_24h, score, now)
         source.schedule_tier = tier
         source.last_scraped = to_naive_utc(now)
         source.next_scrape = to_naive_utc(calculate_source_next_scrape(tier, now, schedule_override_minutes))

@@ -117,7 +117,6 @@ CREATE TABLE analytics_cache (
     avg_comments_per_issue FLOAT NOT NULL DEFAULT 0,
     top_issue_id INTEGER,
     growth_rate FLOAT NOT NULL DEFAULT 0,
-    schedule_tier INTEGER NOT NULL DEFAULT 1,
     cached_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     UNIQUE (source_id, date),
