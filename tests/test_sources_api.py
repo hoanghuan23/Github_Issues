@@ -26,14 +26,15 @@ def make_issue(issue_id: int, created_at: str, comments: int = 0) -> dict:
 
 
 class FakeGitHubClient:
-    def __init__(self, db_session):
+    def __init__(self, db_session, issues=None):
         self.db_session = db_session
         self.comment_calls = 0
+        self.issues = issues
 
     def list_recent_repo_issues(self, source):
         assert not self.db_session.in_transaction()
         created_at = (utc_now() - timedelta(hours=1)).isoformat().replace("+00:00", "Z")
-        return [make_issue(101, created_at, comments=2)]
+        return self.issues or [make_issue(101, created_at, comments=2)]
 
     def list_issue_comments(self, repo_full_name, issue_number):
         self.comment_calls += 1
@@ -62,7 +63,32 @@ def test_source_service_does_not_hold_transaction_while_calling_github(db_sessio
     assert cache.source_id == source.id
     assert cache.total_issues == 1
     assert cache.total_comments == 2
+    assert cache.top_issue_id == issue.id
     assert cache.growth_rate == 8
+
+
+def test_analytics_cache_tracks_top_issue_by_comment_count(db_session):
+    created_at = (utc_now() - timedelta(hours=1)).isoformat().replace("+00:00", "Z")
+    fake_client = FakeGitHubClient(
+        db_session,
+        issues=[
+            make_issue(201, created_at, comments=2),
+            make_issue(202, created_at, comments=9),
+            make_issue(203, created_at, comments=4),
+        ],
+    )
+    source, _job = SourceService(fake_client).create_source_and_scrape(
+        db_session,
+        "https://github.com/acme/repo/issues",
+        include_comments=False,
+    )
+
+    top_issue = db_session.query(Issue).filter_by(github_issue_id=202).one()
+    cache = db_session.query(AnalyticsCache).one()
+    assert cache.source_id == source.id
+    assert cache.total_issues == 3
+    assert cache.total_comments == 15
+    assert cache.top_issue_id == top_issue.id
 
 
 def test_analytics_cache_updates_same_day_and_inserts_next_day(db_session):

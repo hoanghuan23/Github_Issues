@@ -107,9 +107,19 @@ def upsert_analytics_cache(
         cache = AnalyticsCache(source_id=source_id, date=cache_date)
         db.add(cache)
 
+    cutoff = to_naive_utc(now - timedelta(hours=24))
+    top_issue_id = db.scalar(
+        select(Issue.id)
+        .join(SourceIssue, SourceIssue.issue_id == Issue.id)
+        .where(SourceIssue.source_id == source_id, Issue.issue_created_at >= cutoff)
+        .order_by(Issue.comments_count.desc(), Issue.id.asc())
+        .limit(1)
+    )
+
     cache.total_issues = issues_24h
     cache.total_comments = comments_24h
     cache.avg_comments_per_issue = comments_24h / issues_24h if issues_24h else 0.0
+    cache.top_issue_id = top_issue_id
     cache.growth_rate = float(source_score)
     cache.cached_at = now_naive
     return cache
