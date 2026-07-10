@@ -4,7 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.time_utils import parse_github_datetime, to_naive_utc
-from app.db.models import Issue, IssueMetric, SourceIssue
+from app.db.models import AnalyticsCache, Issue, IssueMetric, SourceIssue
 from app.services.scheduler_service import calculate_metric_tier, calculate_next_metric_update
 
 
@@ -36,6 +36,7 @@ def upsert_issue_from_github(
     if existing is None:
         issue = Issue(
             github_issue_id=issue_data["github_issue_id"],
+            source_id=source_id,
             repo_full_name=issue_data["repo_full_name"],
             issue_number=issue_data["issue_number"],
             title=issue_data["title"],
@@ -49,6 +50,7 @@ def upsert_issue_from_github(
         db.add(issue)
     else:
         issue = existing
+        issue.source_id = source_id
         issue.title = issue_data["title"]
         issue.author_login = issue_data["author_login"]
         issue.state = issue_data["state"]
@@ -85,9 +87,39 @@ def source_24h_counts(db: Session, source_id: int, now: datetime) -> tuple[int, 
     return int(row[0]), int(row[1])
 
 
+def upsert_analytics_cache(
+    db: Session,
+    source_id: int,
+    issues_24h: int,
+    comments_24h: int,
+    source_score: int,
+    source_tier: int,
+    now: datetime,
+) -> AnalyticsCache:
+    now_naive = to_naive_utc(now)
+    cache_date = now_naive.date()
+    cache = db.scalar(
+        select(AnalyticsCache).where(
+            AnalyticsCache.source_id == source_id,
+            AnalyticsCache.cache_date == cache_date,
+        )
+    )
+    if cache is None:
+        cache = AnalyticsCache(source_id=source_id, cache_date=cache_date)
+        db.add(cache)
+
+    cache.issues_24h = issues_24h
+    cache.comments_24h = comments_24h
+    cache.source_score = source_score
+    cache.source_tier = source_tier
+    cache.updated_at = now_naive
+    return cache
+
+
 def list_issues(
     db: Session,
     repo_full_name: str | None = None,
+    source_id: int | None = None,
     metric_tier: str | None = None,
     is_tracked: bool | None = None,
     limit: int = 50,
@@ -96,6 +128,8 @@ def list_issues(
     stmt = select(Issue).order_by(Issue.issue_created_at.desc()).limit(limit).offset(offset)
     if repo_full_name:
         stmt = stmt.where(Issue.repo_full_name == repo_full_name)
+    if source_id is not None:
+        stmt = stmt.where(Issue.source_id == source_id)
     if metric_tier:
         stmt = stmt.where(Issue.metric_tier == metric_tier)
     if is_tracked is not None:

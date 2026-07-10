@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.time_utils import to_naive_utc, utc_now
 from app.db.models import PipelineJob
 from app.repositories.comment_repo import upsert_comments
-from app.repositories.issue_repo import source_24h_counts, upsert_issue_from_github
+from app.repositories.issue_repo import source_24h_counts, upsert_analytics_cache, upsert_issue_from_github
 from app.repositories.job_repo import add_log, create_job, finish_job
 from app.repositories.source_repo import get_or_create_repo_source
 from app.services.github_client import GitHubClient, parse_repo_issues_url
@@ -55,7 +55,7 @@ class SourceService:
         include_comments = source.include_comments
         schedule_override_minutes = source.schedule_override_minutes
         source_info = parse_repo_issues_url(
-            f"https://api.github.com/repos/{source_identifier}/issues"
+            f"https://github.com/{source_identifier}/issues"
         )
 
         if job_id is None:
@@ -109,9 +109,11 @@ class SourceService:
                     )
                 )
 
+        db.flush()
         issues_24h, comments_24h = source_24h_counts(db, source_id, now)
         score = calculate_source_score(issues_24h, comments_24h)
         tier = calculate_source_tier(score)
+        upsert_analytics_cache(db, source_id, issues_24h, comments_24h, score, tier, now)
         source.schedule_tier = tier
         source.last_scraped = to_naive_utc(now)
         source.next_scrape = to_naive_utc(calculate_source_next_scrape(tier, now, schedule_override_minutes))

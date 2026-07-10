@@ -47,7 +47,7 @@ class FakeSession:
 
 
 def test_parse_repo_issues_url():
-    source = parse_repo_issues_url("https://api.github.com/repos/microsoft/vscode/issues")
+    source = parse_repo_issues_url("https://github.com/microsoft/vscode/issues")
     assert source.owner == "microsoft"
     assert source.repo == "vscode"
     assert source.identifier == "microsoft/vscode"
@@ -55,7 +55,7 @@ def test_parse_repo_issues_url():
 
 def test_parse_repo_issues_url_rejects_invalid_url():
     with pytest.raises(ValueError):
-        parse_repo_issues_url("https://github.com/microsoft/vscode/issues")
+        parse_repo_issues_url("https://api.github.com/repos/microsoft/vscode/issues")
 
 
 def test_map_issue_item_skips_pull_request():
@@ -69,8 +69,7 @@ def test_list_recent_repo_issues_skips_pr_and_stops_at_older_issue():
     session = FakeSession([[issue_item(1, recent), issue_item(2, recent, True), issue_item(3, old)]])
     client = GitHubClient(token="token", session=session)
 
-    issues = client.list_recent_repo_issues(parse_repo_issues_url("https://api.github.com/repos/acme/repo/issues"))
+    issues = client.list_recent_repo_issues(parse_repo_issues_url("https://github.com/acme/repo/issues"))
 
     assert [issue["github_issue_id"] for issue in issues] == [1]
     assert session.calls[0]["params"]["sort"] == "created"
-

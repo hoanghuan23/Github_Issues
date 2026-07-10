@@ -34,15 +34,14 @@ def parse_repo_issues_url(url: str) -> RepoIssuesSource:
     path_parts = parsed_url.path.strip("/").split("/")
     if (
         parsed_url.scheme != "https"
-        or parsed_url.netloc != "api.github.com"
-        or len(path_parts) != 4
-        or path_parts[0] != "repos"
-        or path_parts[3] != "issues"
+        or parsed_url.netloc != "github.com"
+        or len(path_parts) != 3
+        or path_parts[2] != "issues"
     ):
         raise ValueError(
-            "url must be https://api.github.com/repos/{owner}/{repo}/issues"
+            "url must be https://github.com/{owner}/{repo}/issues"
         )
-    return RepoIssuesSource(owner=path_parts[1], repo=path_parts[2])
+    return RepoIssuesSource(owner=path_parts[0], repo=path_parts[1])
 
 
 class GitHubClient:
@@ -162,4 +161,3 @@ def map_comment_item(item: dict) -> dict:
         "comment_created_at": item["created_at"],
         "comment_updated_at": item["updated_at"],
     }
-

@@ -3,8 +3,10 @@ from datetime import timedelta
 from fastapi.testclient import TestClient
 
 from app.core.time_utils import utc_now
+from app.db.models import AnalyticsCache, Issue
 from app.db.database import get_db
 from app.main import app
+from app.repositories.issue_repo import upsert_analytics_cache
 from app.services.source_service import SourceService
 
 
@@ -42,16 +44,65 @@ def test_source_service_does_not_hold_transaction_while_calling_github(db_sessio
     fake_client = FakeGitHubClient(db_session)
     source, job = SourceService(fake_client).create_source_and_scrape(
         db_session,
-        "https://api.github.com/repos/acme/repo/issues",
+        "https://github.com/acme/repo/issues",
         include_comments=False,
     )
 
     assert source.identifier == "acme/repo"
-    assert source.schedule_tier == 1
+    assert source.schedule_tier == 2
     assert job.status == "done"
     assert job.issues_found == 1
     assert job.issues_new == 1
     assert fake_client.comment_calls == 0
+
+    issue = db_session.query(Issue).one()
+    assert issue.source_id == source.id
+
+    cache = db_session.query(AnalyticsCache).one()
+    assert cache.source_id == source.id
+    assert cache.issues_24h == 1
+    assert cache.comments_24h == 2
+    assert cache.source_score == 8
+    assert cache.source_tier == 2
+
+
+def test_analytics_cache_updates_same_day_and_inserts_next_day(db_session):
+    fake_client = FakeGitHubClient(db_session)
+    source, _job = SourceService(fake_client).create_source_and_scrape(
+        db_session,
+        "https://github.com/acme/repo/issues",
+        include_comments=False,
+    )
+
+    first_cache = db_session.query(AnalyticsCache).one()
+    upsert_analytics_cache(
+        db_session,
+        source.id,
+        issues_24h=3,
+        comments_24h=4,
+        source_score=18,
+        source_tier=2,
+        now=first_cache.updated_at,
+    )
+    db_session.commit()
+
+    caches = db_session.query(AnalyticsCache).all()
+    assert len(caches) == 1
+    assert caches[0].issues_24h == 3
+    assert caches[0].source_tier == 2
+
+    upsert_analytics_cache(
+        db_session,
+        source.id,
+        issues_24h=5,
+        comments_24h=6,
+        source_score=28,
+        source_tier=3,
+        now=first_cache.updated_at + timedelta(days=1),
+    )
+    db_session.commit()
+
+    assert db_session.query(AnalyticsCache).count() == 2
 
 
 def test_post_sources_endpoint_with_mocked_github(db_session, monkeypatch):
@@ -70,7 +121,7 @@ def test_post_sources_endpoint_with_mocked_github(db_session, monkeypatch):
         response = client.post(
             "/sources",
             json={
-                "url": "https://api.github.com/repos/acme/repo/issues",
+                "url": "https://github.com/acme/repo/issues",
                 "include_comments": False,
             },
         )
@@ -81,4 +132,3 @@ def test_post_sources_endpoint_with_mocked_github(db_session, monkeypatch):
     body = response.json()
     assert body["source"]["identifier"] == "acme/repo"
     assert body["job"]["issues_new"] == 1
-

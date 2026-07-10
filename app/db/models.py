@@ -1,6 +1,16 @@
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
@@ -35,6 +45,10 @@ class Issue(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     github_issue_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_id: Mapped[int | None] = mapped_column(
+        ForeignKey("sources.id", ondelete="SET NULL"),
+        index=True,
+    )
     repo_full_name: Mapped[str] = mapped_column(String(300), nullable=False)
     issue_number: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str] = mapped_column(Text, nullable=False)
@@ -63,6 +77,20 @@ class SourceIssue(Base):
     issue_id: Mapped[int] = mapped_column(ForeignKey("issues.id", ondelete="CASCADE"), primary_key=True)
     first_seen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class AnalyticsCache(Base):
+    __tablename__ = "analytics_cache"
+    __table_args__ = (UniqueConstraint("source_id", "cache_date"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_id: Mapped[int] = mapped_column(ForeignKey("sources.id", ondelete="CASCADE"), nullable=False)
+    cache_date: Mapped[date] = mapped_column(Date, nullable=False)
+    issues_24h: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    comments_24h: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    source_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    source_tier: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
 
 class PipelineJob(Base):

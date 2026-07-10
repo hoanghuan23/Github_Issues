@@ -28,6 +28,7 @@ class IssueRead(BaseModel):
 
     id: int
     github_issue_id: int
+    source_id: int | None = None
     repo_full_name: str
     issue_number: int
     title: str
@@ -70,4 +71,3 @@ class IssueListResponse(BaseModel):
     items: list[IssueRead]
     limit: int = Field(ge=1)
     offset: int = Field(ge=0)
-

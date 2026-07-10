@@ -13,6 +13,7 @@ router = APIRouter(prefix="/issues", tags=["issues"])
 @router.get("", response_model=IssueListResponse)
 def issues(
     repo_full_name: str | None = None,
+    source_id: int | None = None,
     metric_tier: str | None = None,
     is_tracked: bool | None = None,
     limit: int = Query(default=50, ge=1, le=200),
@@ -20,7 +21,7 @@ def issues(
     db: Session = Depends(get_db),
 ):
     return {
-        "items": list_issues(db, repo_full_name, metric_tier, is_tracked, limit, offset),
+        "items": list_issues(db, repo_full_name, source_id, metric_tier, is_tracked, limit, offset),
         "limit": limit,
         "offset": offset,
     }
@@ -32,4 +33,3 @@ def issue_detail(issue_id: int, db: Session = Depends(get_db)):
     if issue is None:
         raise HTTPException(status_code=404, detail="issue not found")
     return issue
-

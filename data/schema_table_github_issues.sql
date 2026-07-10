@@ -44,6 +44,7 @@ CREATE TABLE issues (
     id INTEGER PRIMARY KEY,
 
     github_issue_id INTEGER NOT NULL,
+    source_id INTEGER REFERENCES sources(id) ON DELETE SET NULL,
     repo_full_name VARCHAR(300) NOT NULL,
     issue_number INTEGER NOT NULL,
 
@@ -82,6 +83,8 @@ CREATE INDEX idx_issues_hot
     ON issues (state, comments_count DESC);
 CREATE INDEX idx_issues_metric_due
     ON issues (is_tracked, next_metric_update);
+CREATE INDEX idx_issues_source
+    ON issues (source_id);
 
 
 -- Một issue có thể được tìm thấy từ nhiều source, ví dụ repo + label + keyword.
@@ -102,6 +105,27 @@ CREATE TABLE source_issues (
 
 CREATE INDEX idx_source_issues_issue
     ON source_issues (issue_id);
+
+
+CREATE TABLE analytics_cache (
+    id INTEGER PRIMARY KEY,
+    source_id INTEGER NOT NULL,
+    cache_date DATE NOT NULL,
+
+    issues_24h INTEGER NOT NULL DEFAULT 0,
+    comments_24h INTEGER NOT NULL DEFAULT 0,
+    source_score INTEGER NOT NULL DEFAULT 0,
+    source_tier INTEGER NOT NULL DEFAULT 1,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE (source_id, cache_date),
+
+    FOREIGN KEY (source_id)
+        REFERENCES sources(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_analytics_cache_source_date
+    ON analytics_cache (source_id, cache_date);
 
 
 CREATE TABLE pipeline_jobs (
