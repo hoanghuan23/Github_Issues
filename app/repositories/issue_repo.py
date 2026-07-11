@@ -87,6 +87,14 @@ def source_24h_counts(db: Session, source_id: int, now: datetime) -> tuple[int, 
     return int(row[0]), int(row[1])
 
 
+def latest_source_issue_created_at(db: Session, source_id: int) -> datetime | None:
+    return db.scalar(
+        select(func.max(Issue.issue_created_at))
+        .join(SourceIssue, SourceIssue.issue_id == Issue.id)
+        .where(SourceIssue.source_id == source_id)
+    )
+
+
 def upsert_analytics_cache(
     db: Session,
     source_id: int,

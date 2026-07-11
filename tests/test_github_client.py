@@ -76,6 +76,29 @@ def test_list_recent_repo_issues_skips_pr_and_stops_at_older_issue():
     assert session.calls[0]["params"]["sort"] == "created"
 
 
+def test_list_recent_repo_issues_stops_at_latest_saved_created_at():
+    now = utc_now()
+    latest_saved_dt = now - timedelta(hours=1)
+    newest = (now - timedelta(minutes=10)).isoformat().replace("+00:00", "Z")
+    latest_saved = latest_saved_dt.isoformat().replace("+00:00", "Z")
+    older = (now - timedelta(hours=2)).isoformat().replace("+00:00", "Z")
+    session = FakeSession(
+        [
+            [issue_item(1, newest), issue_item(2, latest_saved)],
+            [issue_item(3, older)],
+        ]
+    )
+    client = GitHubClient(token="token", session=session)
+
+    issues = client.list_recent_repo_issues(
+        parse_repo_issues_url("https://github.com/acme/repo/issues"),
+        stop_at_created_at=latest_saved_dt,
+    )
+
+    assert [issue["github_issue_id"] for issue in issues] == [1]
+    assert len(session.calls) == 1
+
+
 def test_get_issue_detail_raises_rate_limit_error():
     session = FakeSession([])
     session.get = lambda url, headers, params=None, timeout=30: FakeResponse(

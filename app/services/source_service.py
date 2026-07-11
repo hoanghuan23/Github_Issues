@@ -5,7 +5,12 @@ from sqlalchemy.orm import Session
 from app.core.time_utils import to_naive_utc, utc_now
 from app.db.models import PipelineJob
 from app.repositories.comment_repo import upsert_comments
-from app.repositories.issue_repo import source_24h_counts, upsert_analytics_cache, upsert_issue_from_github
+from app.repositories.issue_repo import (
+    latest_source_issue_created_at,
+    source_24h_counts,
+    upsert_analytics_cache,
+    upsert_issue_from_github,
+)
 from app.repositories.job_repo import add_log, create_job, finish_job
 from app.repositories.source_repo import get_or_create_repo_source
 from app.services.github_client import GitHubClient, parse_repo_issues_url
@@ -70,8 +75,18 @@ class SourceService:
 
         db.commit()
 
+        stop_at_created_at = (
+            latest_source_issue_created_at(db, source_id)
+            if job.job_type == "scrape_new_issues"
+            else None
+        )
+        db.commit()
+
         try:
-            issues = self.github_client.list_recent_repo_issues(source_info)
+            issues = self.github_client.list_recent_repo_issues(
+                source_info,
+                stop_at_created_at=stop_at_created_at,
+            )
         except Exception as exc:
             job = db.get(PipelineJob, job_id)
             if job:

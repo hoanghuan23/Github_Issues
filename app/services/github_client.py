@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 import requests
 
 from app.core.config import get_settings
-from app.core.time_utils import parse_github_datetime, utc_now
+from app.core.time_utils import ensure_aware_utc, parse_github_datetime, utc_now
 
 
 GITHUB_API_URL = "https://api.github.com"
@@ -67,6 +67,7 @@ class GitHubClient:
         self,
         source: RepoIssuesSource,
         max_hours_old: int = 24,
+        stop_at_created_at: datetime | None = None,
     ) -> list[dict]:
         url = f"{GITHUB_API_URL}/{source.api_path}"
         params = {
@@ -77,6 +78,7 @@ class GitHubClient:
             "page": 1,
         }
         cutoff = utc_now() - timedelta(hours=max_hours_old)
+        stop_at = ensure_aware_utc(stop_at_created_at) if stop_at_created_at else None
         results: list[dict] = []
 
         while True:
@@ -96,7 +98,11 @@ class GitHubClient:
                 mapped = map_issue_item(item, source.identifier)
                 if mapped is None:
                     continue
-                if parse_github_datetime(mapped["issue_created_at"]) < cutoff:
+                issue_created_at = parse_github_datetime(mapped["issue_created_at"])
+                if stop_at and issue_created_at <= stop_at:
+                    reached_old_issue = True
+                    break
+                if issue_created_at < cutoff:
                     reached_old_issue = True
                     break
                 results.append(mapped)

@@ -30,9 +30,11 @@ class FakeGitHubClient:
         self.db_session = db_session
         self.comment_calls = 0
         self.issues = issues
+        self.stop_at_created_at_values = []
 
-    def list_recent_repo_issues(self, source):
+    def list_recent_repo_issues(self, source, stop_at_created_at=None):
         assert not self.db_session.in_transaction()
+        self.stop_at_created_at_values.append(stop_at_created_at)
         created_at = (utc_now() - timedelta(hours=1)).isoformat().replace("+00:00", "Z")
         return self.issues or [make_issue(101, created_at, comments=2)]
 
@@ -80,6 +82,29 @@ def test_source_service_due_scrape_uses_scrape_new_issues_job_type(db_session):
 
     assert job.status == "done"
     assert job.job_type == "scrape_new_issues"
+    assert fake_client.stop_at_created_at_values[0] is None
+    assert fake_client.stop_at_created_at_values[1] is not None
+
+
+def test_source_service_due_scrape_passes_latest_issue_created_at(db_session):
+    old_created_at = (utc_now() - timedelta(hours=2)).isoformat().replace("+00:00", "Z")
+    new_created_at = (utc_now() - timedelta(minutes=30)).isoformat().replace("+00:00", "Z")
+    fake_client = FakeGitHubClient(
+        db_session,
+        issues=[make_issue(301, old_created_at, comments=1)],
+    )
+    source, _initial_job = SourceService(fake_client).create_source_and_scrape(
+        db_session,
+        "https://github.com/acme/repo/issues",
+        include_comments=False,
+    )
+
+    fake_client.issues = [make_issue(302, new_created_at, comments=2)]
+    _source, _job = SourceService(fake_client).scrape_source(db_session, source.id)
+
+    assert fake_client.stop_at_created_at_values[1] == db_session.query(Issue).filter_by(
+        github_issue_id=301,
+    ).one().issue_created_at
 
 
 def test_analytics_cache_tracks_top_issue_by_comment_count(db_session):
