@@ -15,6 +15,7 @@ from app.db.database import init_db
 from app.services.scheduler_service import SchedulerService
 
 
+logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 

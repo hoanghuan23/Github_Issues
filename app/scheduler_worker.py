@@ -1,8 +1,12 @@
+import logging
 import time
 
 from app.core.config import get_settings
 from app.db.database import SessionLocal, init_db
 from app.services.scheduler_service import SchedulerService
+
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 
 
 def run_scheduler_forever(

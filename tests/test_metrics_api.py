@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 
 from app.core.time_utils import to_naive_utc, utc_now
@@ -151,3 +152,14 @@ def test_run_due_metrics_groups_jobs_by_source(db_session):
 
     assert [job.source_id for job in jobs] == [source_one.id, source_two.id]
     assert [job.issues_found for job in jobs] == [2, 1]
+
+
+def test_run_due_metrics_logs_source_progress(db_session, caplog):
+    source = add_source(db_session, "acme/repo")
+    add_due_issue(db_session, 1, source.id)
+
+    caplog.set_level(logging.INFO, logger="app.services.metric_service")
+    MetricService(ClosedIssueGitHubClient()).run_due_metrics(db_session)
+
+    assert f"Bat dau cap nhat metrics | source=repo id={source.id} posts=1 skipped_old=0" in caplog.messages
+    assert f"Hoan tat cap nhat metrics | source=repo id={source.id} updated=1 failed=0" in caplog.messages

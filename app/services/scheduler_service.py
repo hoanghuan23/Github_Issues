@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+import logging
 from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Session
@@ -18,11 +19,22 @@ if TYPE_CHECKING:
     from app.services.source_service import SourceService
 
 
+logger = logging.getLogger(__name__)
+
+
 @dataclass(frozen=True)
 class SchedulerRunResult:
     sources_attempted: int
     sources_failed: int
     metrics_job_ids: list[int]
+    posts_processed: int = 0
+    posts_expired: int = 0
+
+
+def source_log_name(identifier: str | None) -> str:
+    if not identifier:
+        return "unknown"
+    return identifier.rsplit("/", 1)[-1]
 
 
 def calculate_metric_tier(comments_count: int) -> str:
@@ -89,19 +101,51 @@ class SchedulerService:
 
     def run_due(self, db: Session, batch_size: int = 50) -> SchedulerRunResult:
         now = utc_now()
-        source_ids = [source.id for source in due_sources(db, now, batch_size)]
+        due = due_sources(db, now, batch_size)
+        source_ids = [source.id for source in due]
+        source_names = {source.id: source_log_name(source.display_name or source.identifier) for source in due}
         sources_failed = 0
+
+        logger.info(
+            "Scheduler bat dau scrape bai moi | sources_due=%s",
+            len(source_ids),
+        )
 
         for source_id in source_ids:
             try:
+                logger.info(
+                    "Bat dau scrape bai moi | source=%s id=%s type=user max_count=%s",
+                    source_names.get(source_id, "unknown"),
+                    source_id,
+                    batch_size,
+                )
                 self.source_service.scrape_source(db, source_id)
             except Exception:
                 sources_failed += 1
+                logger.exception(
+                    "Scrape bai moi that bai | source=%s id=%s",
+                    source_names.get(source_id, "unknown"),
+                    source_id,
+                )
 
         metrics_jobs = self.metric_service.run_due_metrics(db, batch_size)
+        posts_processed = sum(job.issues_found for job in metrics_jobs)
+        posts_expired = sum(
+            getattr(job, "posts_expired", 0)
+            for job in metrics_jobs
+        )
+
+        logger.info(
+            "Scheduler hoan tat chu ky | sources_processed=%s posts_processed=%s posts_expired=%s",
+            len(source_ids) - sources_failed,
+            posts_processed,
+            posts_expired,
+        )
 
         return SchedulerRunResult(
             sources_attempted=len(source_ids),
             sources_failed=sources_failed,
             metrics_job_ids=[job.id for job in metrics_jobs],
+            posts_processed=posts_processed,
+            posts_expired=posts_expired,
         )

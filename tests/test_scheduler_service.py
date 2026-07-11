@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 
 from app.core.time_utils import to_naive_utc, utc_now
@@ -56,16 +57,23 @@ def test_due_sources_filters_orders_and_limits(db_session):
     assert [source.id for source in sources] == [first_due.id, later_due.id]
 
 
-def test_scheduler_run_due_scrapes_due_sources_and_runs_metric_batch(db_session):
+def test_scheduler_run_due_scrapes_due_sources_and_runs_metric_batch(db_session, caplog):
     now = utc_now()
     due = add_source(db_session, "acme/due", now - timedelta(minutes=1))
     add_source(db_session, "acme/not-due", now + timedelta(minutes=1))
     source_service = FakeSourceService()
     metric_service = FakeMetricService()
 
+    caplog.set_level(logging.INFO, logger="app.services.scheduler_service")
     result = SchedulerService(source_service, metric_service).run_due(db_session, batch_size=25)
 
     assert source_service.scraped_source_ids == [due.id]
     assert metric_service.limits == [25]
     assert result.sources_attempted == 1
     assert result.sources_failed == 0
+    assert "Scheduler bat dau scrape bai moi | sources_due=1" in caplog.messages
+    assert f"Bat dau scrape bai moi | source=due id={due.id} type=user max_count=25" in caplog.messages
+    assert (
+        "Scheduler hoan tat chu ky | sources_processed=1 posts_processed=0 posts_expired=0"
+        in caplog.messages
+    )
