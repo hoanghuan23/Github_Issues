@@ -37,7 +37,7 @@ class SourceService:
         now = utc_now()
 
         source, _created = get_or_create_repo_source(db, source_info.identifier, include_comments)
-        job = create_job(db, "scrape_issues", source.id, now)
+        job = create_job(db, "scrape_new_issues", source.id, now)
         db.commit()
         db.refresh(source)
         db.refresh(job)
@@ -59,7 +59,7 @@ class SourceService:
         )
 
         if job_id is None:
-            job = create_job(db, "scrape_issues", source.id, now)
+            job = create_job(db, "scrape_new_issues", source.id, now)
             db.commit()
             db.refresh(job)
             job_id = job.id

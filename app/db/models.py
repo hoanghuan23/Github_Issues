@@ -100,7 +100,7 @@ class PipelineJob(Base):
     __tablename__ = "pipeline_jobs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    job_type: Mapped[str] = mapped_column(String(30), nullable=False, default="scrape_issues")
+    job_type: Mapped[str] = mapped_column(String(30), nullable=False, default="scrape_new_issues")
     source_id: Mapped[int | None] = mapped_column(ForeignKey("sources.id", ondelete="SET NULL"))
     status: Mapped[str] = mapped_column(String(10), nullable=False, default="pending")
     issues_found: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

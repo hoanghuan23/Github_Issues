@@ -52,6 +52,7 @@ def test_source_service_does_not_hold_transaction_while_calling_github(db_sessio
     assert source.identifier == "acme/repo"
     assert source.schedule_tier == 2
     assert job.status == "done"
+    assert job.job_type == "scrape_new_issues"
     assert job.issues_found == 1
     assert job.issues_new == 1
     assert fake_client.comment_calls == 0
