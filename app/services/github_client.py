@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from datetime import timedelta
 from urllib.parse import urlparse
 
@@ -12,6 +13,10 @@ GITHUB_API_URL = "https://api.github.com"
 
 
 class GitHubNotFoundError(Exception):
+    pass
+
+
+class GitHubRateLimitError(Exception):
     pass
 
 
@@ -107,6 +112,8 @@ class GitHubClient:
         response = self.session.get(url, headers=self._headers(), timeout=30)
         if response.status_code == 404:
             raise GitHubNotFoundError(f"Issue not found: {repo_full_name}#{issue_number}")
+        if response.status_code == 403 and _is_rate_limit_response(response):
+            raise GitHubRateLimitError(_rate_limit_message(response, url))
         response.raise_for_status()
         mapped = map_issue_item(response.json(), repo_full_name)
         if mapped is None:
@@ -161,3 +168,32 @@ def map_comment_item(item: dict) -> dict:
         "comment_created_at": item["created_at"],
         "comment_updated_at": item["updated_at"],
     }
+
+
+def _is_rate_limit_response(response: requests.Response) -> bool:
+    remaining = response.headers.get("X-RateLimit-Remaining")
+    if remaining == "0":
+        return True
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = {}
+    message = str(payload.get("message", "")).lower()
+    return "rate limit" in message
+
+
+def _rate_limit_message(response: requests.Response, url: str) -> str:
+    reset_at = _format_rate_limit_reset(response.headers.get("X-RateLimit-Reset"))
+    if reset_at:
+        return f"GitHub rate limit exceeded for url: {url}. Try again after {reset_at}."
+    return f"GitHub rate limit exceeded for url: {url}"
+
+
+def _format_rate_limit_reset(reset_epoch: str | None) -> str | None:
+    if not reset_epoch:
+        return None
+    try:
+        reset_time = datetime.fromtimestamp(int(reset_epoch), tz=timezone.utc)
+    except (TypeError, ValueError, OSError):
+        return None
+    return reset_time.isoformat().replace("+00:00", "Z")

@@ -3,7 +3,7 @@ from datetime import timedelta
 import pytest
 
 from app.core.time_utils import utc_now
-from app.services.github_client import GitHubClient, map_issue_item, parse_repo_issues_url
+from app.services.github_client import GitHubClient, GitHubRateLimitError, map_issue_item, parse_repo_issues_url
 
 
 def issue_item(issue_id: int, created_at: str, pull_request: bool = False) -> dict:
@@ -24,9 +24,10 @@ def issue_item(issue_id: int, created_at: str, pull_request: bool = False) -> di
 
 
 class FakeResponse:
-    def __init__(self, payload, status_code: int = 200):
+    def __init__(self, payload, status_code: int = 200, headers=None):
         self.payload = payload
         self.status_code = status_code
+        self.headers = headers or {}
 
     def json(self):
         return self.payload
@@ -73,3 +74,16 @@ def test_list_recent_repo_issues_skips_pr_and_stops_at_older_issue():
 
     assert [issue["github_issue_id"] for issue in issues] == [1]
     assert session.calls[0]["params"]["sort"] == "created"
+
+
+def test_get_issue_detail_raises_rate_limit_error():
+    session = FakeSession([])
+    session.get = lambda url, headers, params=None, timeout=30: FakeResponse(
+        {"message": "API rate limit exceeded"},
+        status_code=403,
+        headers={"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "1760000000"},
+    )
+    client = GitHubClient(token="token", session=session)
+
+    with pytest.raises(GitHubRateLimitError, match="GitHub rate limit exceeded"):
+        client.get_issue_detail("acme/repo", 1)

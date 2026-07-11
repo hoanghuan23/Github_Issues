@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from app.core.time_utils import to_naive_utc, utc_now
 from app.db.models import Issue
+from app.services.github_client import GitHubRateLimitError
 from app.services.metric_service import MetricService
 
 
@@ -32,6 +33,15 @@ class ClosedIssueGitHubClient:
 class FailingGitHubClient:
     def get_issue_detail(self, repo_full_name: str, issue_number: int):
         raise RuntimeError(f"failed to update {repo_full_name}#{issue_number}")
+
+
+class RateLimitedGitHubClient:
+    def __init__(self):
+        self.calls = 0
+
+    def get_issue_detail(self, repo_full_name: str, issue_number: int):
+        self.calls += 1
+        raise GitHubRateLimitError(f"GitHub rate limit exceeded for {repo_full_name}#{issue_number}")
 
 
 def add_due_issue(db_session, issue_number: int = 1):
@@ -104,3 +114,15 @@ def test_run_due_metrics_records_update_failures_on_job(db_session):
     assert job.issues_updated == 1
     assert job.items_failed == 1
     assert job.error_message == "failed to update acme/repo#1"
+
+
+def test_run_due_metrics_stops_batch_on_rate_limit(db_session):
+    add_due_issues(db_session, 5)
+    client = RateLimitedGitHubClient()
+
+    job = MetricService(client).run_due_metrics(db_session)
+
+    assert client.calls == 1
+    assert job.issues_found == 5
+    assert job.items_failed == 1
+    assert job.error_message == "GitHub rate limit exceeded for acme/repo#1"

@@ -6,7 +6,7 @@ from app.core.time_utils import utc_now
 from app.db.models import Issue
 from app.repositories.issue_repo import due_metric_issues, mark_issue_deleted, update_issue_from_detail
 from app.repositories.job_repo import add_log, create_job, finish_job
-from app.services.github_client import GitHubClient, GitHubNotFoundError
+from app.services.github_client import GitHubClient, GitHubNotFoundError, GitHubRateLimitError
 
 
 @dataclass(frozen=True)
@@ -59,6 +59,18 @@ class MetricService:
                     error_type=type(exc).__name__,
                 )
                 db.commit()
+            except GitHubRateLimitError as exc:
+                job.items_failed += 1
+                self._record_job_error(job, str(exc))
+                add_log(
+                    db,
+                    str(exc),
+                    log_level="WARNING",
+                    job_id=job.id,
+                    error_type=type(exc).__name__,
+                )
+                db.commit()
+                break
             except Exception as exc:
                 job.items_failed += 1
                 self._record_job_error(job, str(exc))
