@@ -53,8 +53,7 @@ class JobRead(BaseModel):
     status: str
     issues_found: int
     issues_new: int
-    comments_found: int
-    comments_new: int
+    issues_updated: int
     items_failed: int
     error_message: str | None = None
     started_at: datetime | None = None

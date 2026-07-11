@@ -31,6 +31,7 @@ class MetricService:
         db.refresh(job)
 
         job.issues_found = len(targets)
+        job.issues_updated = len(targets)
         for target in targets:
             try:
                 issue_data = self.github_client.get_issue_detail(
@@ -40,10 +41,13 @@ class MetricService:
                 issue = db.get(Issue, target.issue_id)
                 if issue is None:
                     job.items_failed += 1
+                    self._record_job_error(job, f"Issue {target.issue_id} not found")
                     continue
                 update_issue_from_detail(db, issue, issue_data, job.id, utc_now())
                 db.commit()
             except GitHubNotFoundError as exc:
+                job.items_failed += 1
+                self._record_job_error(job, str(exc))
                 issue = db.get(Issue, target.issue_id)
                 if issue is not None:
                     mark_issue_deleted(db, issue)
@@ -57,10 +61,18 @@ class MetricService:
                 db.commit()
             except Exception as exc:
                 job.items_failed += 1
+                self._record_job_error(job, str(exc))
                 add_log(db, str(exc), job_id=job.id, error_type=type(exc).__name__)
                 db.commit()
 
-        finish_job(db, job, "done", utc_now())
+        finish_job(db, job, "done", utc_now(), job.error_message)
         db.commit()
         db.refresh(job)
         return job
+
+    @staticmethod
+    def _record_job_error(job, message: str) -> None:
+        if job.error_message:
+            job.error_message = f"{job.error_message}\n{message}"
+        else:
+            job.error_message = message

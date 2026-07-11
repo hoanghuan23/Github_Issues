@@ -149,8 +149,7 @@ CREATE TABLE pipeline_jobs (
 
     issues_found INTEGER NOT NULL DEFAULT 0,
     issues_new INTEGER NOT NULL DEFAULT 0,
-    comments_found INTEGER NOT NULL DEFAULT 0,
-    comments_new INTEGER NOT NULL DEFAULT 0,
+    issues_updated INTEGER NOT NULL DEFAULT 0,
     items_failed INTEGER NOT NULL DEFAULT 0,
 
     error_message TEXT,

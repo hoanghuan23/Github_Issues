@@ -125,9 +125,7 @@ class SourceService:
                     pending.repo_full_name,
                     pending.issue_number,
                 )
-                found, new_count = upsert_comments(db, pending.issue_id, comments, utc_now())
-                job.comments_found += found
-                job.comments_new += new_count
+                upsert_comments(db, pending.issue_id, comments, utc_now())
                 db.commit()
             except Exception as exc:
                 job.items_failed += 1
