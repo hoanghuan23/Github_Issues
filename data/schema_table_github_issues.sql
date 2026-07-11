@@ -134,8 +134,9 @@ CREATE INDEX idx_analytics_cache_source_date
 CREATE TABLE pipeline_jobs (
     id INTEGER PRIMARY KEY,
 
-    job_type VARCHAR(30) NOT NULL DEFAULT 'scrape_new_issues'
+    job_type VARCHAR(30) NOT NULL DEFAULT 'scrape_issues'
         CHECK (job_type IN (
+            'scrape_issues',
             'scrape_new_issues',
             'update_metrics',
             'scrape_comments',

@@ -52,7 +52,7 @@ def test_source_service_does_not_hold_transaction_while_calling_github(db_sessio
     assert source.identifier == "acme/repo"
     assert source.schedule_tier == 2
     assert job.status == "done"
-    assert job.job_type == "scrape_new_issues"
+    assert job.job_type == "scrape_issues"
     assert job.issues_found == 1
     assert job.issues_new == 1
     assert fake_client.comment_calls == 0
@@ -66,6 +66,20 @@ def test_source_service_does_not_hold_transaction_while_calling_github(db_sessio
     assert cache.total_comments == 2
     assert cache.top_issue_id == issue.id
     assert cache.growth_rate == 8
+
+
+def test_source_service_due_scrape_uses_scrape_new_issues_job_type(db_session):
+    fake_client = FakeGitHubClient(db_session)
+    source, _initial_job = SourceService(fake_client).create_source_and_scrape(
+        db_session,
+        "https://github.com/acme/repo/issues",
+        include_comments=False,
+    )
+
+    _source, job = SourceService(fake_client).scrape_source(db_session, source.id)
+
+    assert job.status == "done"
+    assert job.job_type == "scrape_new_issues"
 
 
 def test_analytics_cache_tracks_top_issue_by_comment_count(db_session):
