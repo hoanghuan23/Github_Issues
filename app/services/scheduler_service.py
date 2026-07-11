@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 class SchedulerRunResult:
     sources_attempted: int
     sources_failed: int
-    metrics_job_id: int | None
+    metrics_job_ids: list[int]
 
 
 def calculate_metric_tier(comments_count: int) -> str:
@@ -98,10 +98,10 @@ class SchedulerService:
             except Exception:
                 sources_failed += 1
 
-        metrics_job = self.metric_service.run_due_metrics(db, batch_size)
+        metrics_jobs = self.metric_service.run_due_metrics(db, batch_size)
 
         return SchedulerRunResult(
             sources_attempted=len(source_ids),
             sources_failed=sources_failed,
-            metrics_job_id=getattr(metrics_job, "id", None),
+            metrics_job_ids=[job.id for job in metrics_jobs],
         )

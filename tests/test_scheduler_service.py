@@ -20,7 +20,7 @@ class FakeMetricService:
 
     def run_due_metrics(self, db, limit):
         self.limits.append(limit)
-        return None
+        return []
 
 
 def add_source(

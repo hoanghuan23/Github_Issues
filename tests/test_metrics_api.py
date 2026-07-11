@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from app.core.time_utils import to_naive_utc, utc_now
-from app.db.models import Issue
+from app.db.models import Issue, Source
 from app.services.github_client import GitHubRateLimitError
 from app.services.metric_service import MetricService
 
@@ -44,10 +44,22 @@ class RateLimitedGitHubClient:
         raise GitHubRateLimitError(f"GitHub rate limit exceeded for {repo_full_name}#{issue_number}")
 
 
-def add_due_issue(db_session, issue_number: int = 1):
+def add_source(db_session, identifier: str = "acme/repo"):
+    source = Source(
+        source_type="repo",
+        identifier=identifier,
+        display_name=identifier,
+    )
+    db_session.add(source)
+    db_session.commit()
+    return source
+
+
+def add_due_issue(db_session, issue_number: int = 1, source_id: int | None = None):
     now = utc_now()
     issue = Issue(
         github_issue_id=issue_number,
+        source_id=source_id,
         repo_full_name="acme/repo",
         issue_number=issue_number,
         title="Open issue",
@@ -72,7 +84,7 @@ def add_due_issues(db_session, count: int):
 def test_run_due_metrics_marks_404_issue_deleted(db_session):
     issue_id = add_due_issue(db_session)
 
-    job = MetricService(NotFoundGitHubClient()).run_due_metrics(db_session)
+    job = MetricService(NotFoundGitHubClient()).run_due_metrics(db_session)[0]
 
     issue = db_session.get(Issue, issue_id)
     assert issue.is_deleted is True
@@ -98,7 +110,7 @@ def test_run_due_metrics_stops_tracking_closed_issue(db_session):
 def test_run_due_metrics_counts_due_targets_as_updated(db_session):
     add_due_issues(db_session, 5)
 
-    job = MetricService(ClosedIssueGitHubClient()).run_due_metrics(db_session)
+    job = MetricService(ClosedIssueGitHubClient()).run_due_metrics(db_session)[0]
 
     assert job.issues_found == 5
     assert job.issues_updated == 5
@@ -109,7 +121,7 @@ def test_run_due_metrics_counts_due_targets_as_updated(db_session):
 def test_run_due_metrics_records_update_failures_on_job(db_session):
     add_due_issue(db_session)
 
-    job = MetricService(FailingGitHubClient()).run_due_metrics(db_session)
+    job = MetricService(FailingGitHubClient()).run_due_metrics(db_session)[0]
 
     assert job.issues_updated == 1
     assert job.items_failed == 1
@@ -120,9 +132,22 @@ def test_run_due_metrics_stops_batch_on_rate_limit(db_session):
     add_due_issues(db_session, 5)
     client = RateLimitedGitHubClient()
 
-    job = MetricService(client).run_due_metrics(db_session)
+    job = MetricService(client).run_due_metrics(db_session)[0]
 
     assert client.calls == 1
     assert job.issues_found == 5
     assert job.items_failed == 1
     assert job.error_message == "GitHub rate limit exceeded for acme/repo#1"
+
+
+def test_run_due_metrics_groups_jobs_by_source(db_session):
+    source_one = add_source(db_session, "acme/one")
+    source_two = add_source(db_session, "acme/two")
+    add_due_issue(db_session, 1, source_one.id)
+    add_due_issue(db_session, 2, source_two.id)
+    add_due_issue(db_session, 3, source_one.id)
+
+    jobs = MetricService(ClosedIssueGitHubClient()).run_due_metrics(db_session)
+
+    assert [job.source_id for job in jobs] == [source_one.id, source_two.id]
+    assert [job.issues_found for job in jobs] == [2, 1]
