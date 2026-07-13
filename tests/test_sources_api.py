@@ -33,6 +33,9 @@ class FakeGitHubClient:
         self.stop_at_created_at_values = []
 
     def list_recent_repo_issues(self, source, stop_at_created_at=None):
+        return self.list_recent_source_issues(source, stop_at_created_at)
+
+    def list_recent_source_issues(self, source, stop_at_created_at=None):
         assert not self.db_session.in_transaction()
         self.stop_at_created_at_values.append(stop_at_created_at)
         created_at = (utc_now() - timedelta(hours=1)).isoformat().replace("+00:00", "Z")
@@ -52,6 +55,7 @@ def test_source_service_does_not_hold_transaction_while_calling_github(db_sessio
     )
 
     assert source.identifier == "acme/repo"
+    assert source.source_type == "repo"
     assert source.schedule_tier == 2
     assert job.status == "done"
     assert job.job_type == "scrape_issues"
@@ -194,3 +198,42 @@ def test_post_sources_endpoint_with_mocked_github(db_session, monkeypatch):
     body = response.json()
     assert body["source"]["identifier"] == "acme/repo"
     assert body["job"]["issues_new"] == 1
+
+
+def test_source_service_creates_organization_source(db_session):
+    fake_client = FakeGitHubClient(db_session)
+    source, job = SourceService(fake_client).create_source_and_scrape(
+        db_session,
+        "https://github.com/search?q=org:kubernetes is:issue state:open&type=issues",
+        include_comments=False,
+    )
+
+    assert source.source_type == "organization"
+    assert source.identifier == "kubernetes"
+    assert job.status == "done"
+
+
+def test_source_service_creates_keyword_source(db_session):
+    fake_client = FakeGitHubClient(db_session)
+    source, job = SourceService(fake_client).create_source_and_scrape(
+        db_session,
+        'https://github.com/search?q="memory leak" is:issue state:open&type=issues',
+        include_comments=False,
+    )
+
+    assert source.source_type == "keyword"
+    assert source.identifier == "memory leak"
+    assert job.status == "done"
+
+
+def test_source_service_creates_label_source(db_session):
+    fake_client = FakeGitHubClient(db_session)
+    source, job = SourceService(fake_client).create_source_and_scrape(
+        db_session,
+        "https://github.com/microsoft/vscode/issues?q=is:issue state:open label:bug",
+        include_comments=False,
+    )
+
+    assert source.source_type == "label"
+    assert source.identifier == "microsoft/vscode:bug"
+    assert job.status == "done"

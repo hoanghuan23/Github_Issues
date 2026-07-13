@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from datetime import timedelta
-from urllib.parse import urlparse
+import shlex
+from urllib.parse import parse_qs, urlparse
 
 import requests
 
@@ -21,6 +22,16 @@ class GitHubRateLimitError(Exception):
 
 
 @dataclass(frozen=True)
+class GitHubIssuesSource:
+    source_type: str
+    identifier: str
+    display_name: str
+    api_path: str
+    params: dict[str, str]
+    repo_full_name: str | None = None
+
+
+@dataclass(frozen=True)
 class RepoIssuesSource:
     owner: str
     repo: str
@@ -35,18 +46,160 @@ class RepoIssuesSource:
 
 
 def parse_repo_issues_url(url: str) -> RepoIssuesSource:
-    parsed_url = urlparse(url)
-    path_parts = parsed_url.path.strip("/").split("/")
-    if (
-        parsed_url.scheme != "https"
-        or parsed_url.netloc != "github.com"
-        or len(path_parts) != 3
-        or path_parts[2] != "issues"
-    ):
+    source = parse_github_source_url(url)
+    if source.source_type != "repo" or source.repo_full_name is None:
         raise ValueError(
             "url must be https://github.com/{owner}/{repo}/issues"
         )
-    return RepoIssuesSource(owner=path_parts[0], repo=path_parts[1])
+    owner, repo = source.repo_full_name.split("/", 1)
+    return RepoIssuesSource(owner=owner, repo=repo)
+
+
+def parse_github_source_url(url: str) -> GitHubIssuesSource:
+    parsed_url = urlparse(url)
+    path_parts = parsed_url.path.strip("/").split("/")
+
+    if (
+        parsed_url.scheme == "https"
+        and parsed_url.netloc == "github.com"
+        and len(path_parts) == 3
+        and path_parts[2] == "issues"
+    ):
+        repo_full_name = f"{path_parts[0]}/{path_parts[1]}"
+        query_params = parse_qs(parsed_url.query)
+        query = _single_query_param(query_params, "q")
+        label = _label_from_search_query(query) if query else None
+        if label:
+            return source_from_type_identifier("label", f"{repo_full_name}:{label}")
+        return source_from_type_identifier("repo", repo_full_name)
+
+    if (
+        parsed_url.scheme == "https"
+        and parsed_url.netloc == "github.com"
+        and path_parts == ["search"]
+    ):
+        query_params = parse_qs(parsed_url.query)
+        query = _single_query_param(query_params, "q")
+        if not query:
+            raise ValueError("search source url must include q")
+        source_type, identifier = _parse_search_query_source(query)
+        return source_from_type_identifier(source_type, identifier)
+
+    if parsed_url.scheme != "https" or parsed_url.netloc != "api.github.com":
+        raise ValueError("unsupported GitHub source url")
+
+    query_params = parse_qs(parsed_url.query)
+    if len(path_parts) == 4 and path_parts[0] == "repos" and path_parts[3] == "issues":
+        repo_full_name = f"{path_parts[1]}/{path_parts[2]}"
+        labels = _single_query_param(query_params, "labels")
+        if not labels:
+            raise ValueError("label source url must include labels")
+        return source_from_type_identifier("label", f"{repo_full_name}:{labels}")
+
+    if len(path_parts) == 2 and path_parts == ["search", "issues"]:
+        query = _single_query_param(query_params, "q")
+        if not query:
+            raise ValueError("search source url must include q")
+        source_type, identifier = _parse_search_query_source(query)
+        return source_from_type_identifier(source_type, identifier)
+
+    raise ValueError("unsupported GitHub source url")
+
+
+def source_from_type_identifier(source_type: str, identifier: str) -> GitHubIssuesSource:
+    if source_type == "repo":
+        owner, repo = _split_repo_identifier(identifier)
+        repo_full_name = f"{owner}/{repo}"
+        return GitHubIssuesSource(
+            source_type="repo",
+            identifier=repo_full_name,
+            display_name=repo_full_name,
+            api_path=f"repos/{repo_full_name}/issues",
+            params={},
+            repo_full_name=repo_full_name,
+        )
+    if source_type == "label":
+        repo_full_name, label = _split_label_identifier(identifier)
+        return GitHubIssuesSource(
+            source_type="label",
+            identifier=f"{repo_full_name}:{label}",
+            display_name=f"{repo_full_name}:{label}",
+            api_path=f"repos/{repo_full_name}/issues",
+            params={"labels": label},
+            repo_full_name=repo_full_name,
+        )
+    if source_type == "organization":
+        return GitHubIssuesSource(
+            source_type="organization",
+            identifier=identifier,
+            display_name=identifier,
+            api_path="search/issues",
+            params={"q": f"org:{identifier} is:issue state:open"},
+        )
+    if source_type == "keyword":
+        query_keyword = f'"{identifier}"' if " " in identifier else identifier
+        return GitHubIssuesSource(
+            source_type="keyword",
+            identifier=identifier,
+            display_name=identifier,
+            api_path="search/issues",
+            params={"q": f"{query_keyword} is:issue state:open"},
+        )
+    raise ValueError(f"unsupported source_type: {source_type}")
+
+
+def _single_query_param(query_params: dict[str, list[str]], name: str) -> str | None:
+    values = query_params.get(name)
+    if not values:
+        return None
+    return values[0].strip()
+
+
+def _parse_search_query_source(query: str) -> tuple[str, str]:
+    tokens = _search_query_tokens(query)
+
+    for token in tokens:
+        if token.startswith("org:") and token != "org:":
+            return "organization", token.removeprefix("org:").strip()
+
+    keyword_tokens = [
+        token
+        for token in tokens
+        if token not in {"is:issue", "state:open"}
+    ]
+    keyword = " ".join(keyword_tokens).strip().strip('"')
+    if not keyword:
+        raise ValueError("keyword search source must include a keyword")
+    return "keyword", keyword
+
+
+def _label_from_search_query(query: str) -> str | None:
+    for token in _search_query_tokens(query):
+        if token.startswith("label:") and token != "label:":
+            return token.removeprefix("label:").strip()
+    return None
+
+
+def _search_query_tokens(query: str) -> list[str]:
+    try:
+        return shlex.split(query)
+    except ValueError:
+        return query.split()
+
+
+def _split_repo_identifier(identifier: str) -> tuple[str, str]:
+    parts = identifier.split("/", 1)
+    if len(parts) != 2 or not all(parts):
+        raise ValueError("repo identifier must be owner/repo")
+    return parts[0], parts[1]
+
+
+def _split_label_identifier(identifier: str) -> tuple[str, str]:
+    repo_full_name, separator, label = identifier.partition(":")
+    if not separator or not repo_full_name or not label:
+        raise ValueError("label identifier must be owner/repo:label")
+    _split_repo_identifier(repo_full_name)
+    return repo_full_name, label
 
 
 class GitHubClient:
@@ -69,6 +222,18 @@ class GitHubClient:
         max_hours_old: int = 24,
         stop_at_created_at: datetime | None = None,
     ) -> list[dict]:
+        return self.list_recent_source_issues(
+            source_from_type_identifier("repo", source.identifier),
+            max_hours_old=max_hours_old,
+            stop_at_created_at=stop_at_created_at,
+        )
+
+    def list_recent_source_issues(
+        self,
+        source: GitHubIssuesSource,
+        max_hours_old: int = 24,
+        stop_at_created_at: datetime | None = None,
+    ) -> list[dict]:
         url = f"{GITHUB_API_URL}/{source.api_path}"
         params = {
             "state": "open",
@@ -77,6 +242,11 @@ class GitHubClient:
             "per_page": 100,
             "page": 1,
         }
+        if source.api_path == "search/issues":
+            params.pop("state")
+            params.pop("direction")
+            params["order"] = "desc"
+        params.update(source.params)
         cutoff = utc_now() - timedelta(hours=max_hours_old)
         stop_at = ensure_aware_utc(stop_at_created_at) if stop_at_created_at else None
         results: list[dict] = []
@@ -92,10 +262,13 @@ class GitHubClient:
             items = response.json()
             if not items:
                 break
+            if isinstance(items, dict):
+                items = items.get("items", [])
 
             reached_old_issue = False
             for item in items:
-                mapped = map_issue_item(item, source.identifier)
+                repo_full_name = source.repo_full_name or repo_full_name_from_issue_item(item)
+                mapped = map_issue_item(item, repo_full_name)
                 if mapped is None:
                     continue
                 issue_created_at = parse_github_datetime(mapped["issue_created_at"])
@@ -163,6 +336,27 @@ def map_issue_item(item: dict, repo_full_name: str) -> dict | None:
         "issue_created_at": item["created_at"],
         "issue_updated_at": item["updated_at"],
     }
+
+
+def repo_full_name_from_issue_item(item: dict) -> str:
+    repository_url = item.get("repository_url")
+    if repository_url:
+        parsed_url = urlparse(repository_url)
+        path_parts = parsed_url.path.strip("/").split("/")
+        if (
+            parsed_url.netloc == "api.github.com"
+            and len(path_parts) == 3
+            and path_parts[0] == "repos"
+        ):
+            return f"{path_parts[1]}/{path_parts[2]}"
+
+    html_url = item.get("html_url", "")
+    parsed_url = urlparse(html_url)
+    path_parts = parsed_url.path.strip("/").split("/")
+    if parsed_url.netloc == "github.com" and len(path_parts) >= 2:
+        return f"{path_parts[0]}/{path_parts[1]}"
+
+    raise ValueError("GitHub issue item does not include repository information")
 
 
 def map_comment_item(item: dict) -> dict:

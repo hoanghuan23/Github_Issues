@@ -12,8 +12,12 @@ from app.repositories.issue_repo import (
     upsert_issue_from_github,
 )
 from app.repositories.job_repo import add_log, create_job, finish_job
-from app.repositories.source_repo import get_or_create_repo_source
-from app.services.github_client import GitHubClient, parse_repo_issues_url
+from app.repositories.source_repo import get_or_create_source
+from app.services.github_client import (
+    GitHubClient,
+    parse_github_source_url,
+    source_from_type_identifier,
+)
 from app.services.scheduler_service import (
     calculate_source_next_scrape,
     calculate_source_score,
@@ -38,10 +42,16 @@ class SourceService:
         url: str,
         include_comments: bool,
     ):
-        source_info = parse_repo_issues_url(url)
+        source_info = parse_github_source_url(url)
         now = utc_now()
 
-        source, _created = get_or_create_repo_source(db, source_info.identifier, include_comments)
+        source, _created = get_or_create_source(
+            db,
+            source_info.source_type,
+            source_info.identifier,
+            source_info.display_name,
+            include_comments,
+        )
         job = create_job(db, "scrape_issues", source.id, now)
         db.commit()
         db.refresh(source)
@@ -59,8 +69,9 @@ class SourceService:
         source_identifier = source.identifier
         include_comments = source.include_comments
         schedule_override_minutes = source.schedule_override_minutes
-        source_info = parse_repo_issues_url(
-            f"https://github.com/{source_identifier}/issues"
+        source_info = source_from_type_identifier(
+            source.source_type,
+            source_identifier,
         )
 
         if job_id is None:
@@ -83,7 +94,7 @@ class SourceService:
         db.commit()
 
         try:
-            issues = self.github_client.list_recent_repo_issues(
+            issues = self.github_client.list_recent_source_issues(
                 source_info,
                 stop_at_created_at=stop_at_created_at,
             )

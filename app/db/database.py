@@ -59,3 +59,10 @@ def ensure_schema_compatibility() -> None:
         }
         if "labels_json" not in issue_columns:
             connection.execute(text("ALTER TABLE issues ADD COLUMN labels_json TEXT"))
+
+        pipeline_log_columns = {
+            row[1]
+            for row in connection.execute(text("PRAGMA table_info(pipeline_logs)")).fetchall()
+        }
+        if "error_details" not in pipeline_log_columns:
+            connection.execute(text("ALTER TABLE pipeline_logs ADD COLUMN error_details TEXT"))
