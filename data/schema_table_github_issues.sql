@@ -68,9 +68,9 @@ CREATE TABLE issues (
 
     last_metric_update DATETIME,
     next_metric_update DATETIME,
-    metric_tier VARCHAR(20) NOT NULL DEFAULT 'bootstrap'
+    metric_tier VARCHAR(20) NOT NULL DEFAULT 'very_low'
         CHECK (metric_tier IN (
-            'hot', 'high', 'medium', 'low', 'very_low', 'bootstrap'
+            'hot', 'high', 'medium', 'low', 'very_low'
         )),
 
     UNIQUE (github_issue_id),

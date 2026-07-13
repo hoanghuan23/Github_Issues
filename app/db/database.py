@@ -59,6 +59,10 @@ def ensure_schema_compatibility() -> None:
         }
         if "labels_json" not in issue_columns:
             connection.execute(text("ALTER TABLE issues ADD COLUMN labels_json TEXT"))
+        if "metric_tier" in issue_columns:
+            connection.execute(
+                text("UPDATE issues SET metric_tier = 'very_low' WHERE metric_tier = 'bootstrap'")
+            )
 
         pipeline_log_columns = {
             row[1]

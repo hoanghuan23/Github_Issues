@@ -42,7 +42,7 @@ class Issue(Base):
         UniqueConstraint("github_issue_id"),
         UniqueConstraint("repo_full_name", "issue_number"),
         CheckConstraint("state IN ('open', 'closed')"),
-        CheckConstraint("metric_tier IN ('hot', 'high', 'medium', 'low', 'very_low', 'bootstrap')"),
+        CheckConstraint("metric_tier IN ('hot', 'high', 'medium', 'low', 'very_low')"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -67,7 +67,7 @@ class Issue(Base):
     is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     last_metric_update: Mapped[datetime | None] = mapped_column(DateTime)
     next_metric_update: Mapped[datetime | None] = mapped_column(DateTime)
-    metric_tier: Mapped[str] = mapped_column(String(20), nullable=False, default="bootstrap")
+    metric_tier: Mapped[str] = mapped_column(String(20), nullable=False, default="very_low")
 
     metrics: Mapped[list["IssueMetric"]] = relationship(back_populates="issue")
 
