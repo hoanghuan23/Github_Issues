@@ -16,6 +16,8 @@ from app.services.scheduler_service import SchedulerService
 
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
+logging.getLogger("watchfiles").setLevel(logging.WARNING)
+logging.getLogger("watchfiles.main").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
