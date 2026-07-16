@@ -119,7 +119,15 @@ class SchedulerService:
                     source_id,
                     batch_size,
                 )
-                self.source_service.scrape_source(db, source_id)
+                _source, job = self.source_service.scrape_source(db, source_id)
+                logger.info(
+                    "Hoan tat scrape bai moi | source=%s id=%s found=%s new=%s failed=%s",
+                    source_names.get(source_id, "unknown"),
+                    source_id,
+                    job.issues_found,
+                    job.issues_new,
+                    job.items_failed,
+                )
             except Exception:
                 sources_failed += 1
                 logger.exception(

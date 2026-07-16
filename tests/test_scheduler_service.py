@@ -1,5 +1,6 @@
 import logging
 from datetime import timedelta
+from types import SimpleNamespace
 
 from app.core.time_utils import to_naive_utc, utc_now
 from app.db.models import Source
@@ -13,6 +14,8 @@ class FakeSourceService:
 
     def scrape_source(self, db, source_id):
         self.scraped_source_ids.append(source_id)
+        job = SimpleNamespace(issues_found=5, issues_new=5, items_failed=0)
+        return None, job
 
 
 class FakeMetricService:
@@ -73,6 +76,7 @@ def test_scheduler_run_due_scrapes_due_sources_and_runs_metric_batch(db_session,
     assert result.sources_failed == 0
     assert "Scheduler bat dau scrape bai moi | sources_due=1" in caplog.messages
     assert f"Bat dau scrape bai moi | source=due id={due.id} type=user max_count=25" in caplog.messages
+    assert f"Hoan tat scrape bai moi | source=due id={due.id} found=5 new=5 failed=0" in caplog.messages
     assert (
         "Scheduler hoan tat chu ky | sources_processed=1 posts_processed=0 posts_expired=0"
         in caplog.messages
